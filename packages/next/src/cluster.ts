@@ -18,6 +18,7 @@ export function createTestCluster(
       ...options,
       store,
       localClock: () => Date.now() + skew,
+      syncNextManifest: options.syncNextManifest ?? false,
       onError: options.onError ?? (() => {}),
     }
     return {

@@ -28,6 +28,7 @@ interface CacheValue {
   kind: string
   tags?: string[]
   headers?: Record<string, unknown>
+  [field: string]: unknown
 }
 export interface LegacyEntry {
   lastModified: number

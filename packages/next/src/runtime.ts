@@ -6,6 +6,7 @@ import {
 } from '@cacheforge/core'
 import { ClusterClock } from './clock.js'
 import { TagManifest, type Consistency } from './manifest.js'
+import { loadNextTagsManifest, mirrorIntoNext } from './next-bridge.js'
 
 export interface CacheForgeOptions {
   /** A Redis URL (`redis://…`), or a ready {@link CacheStore}. */
@@ -22,6 +23,11 @@ export interface CacheForgeOptions {
   syncIntervalMs?: number
   /** Called when the store fails during a read or write (which then degrade to cache misses). */
   onError?: (error: unknown, operation: string) => void
+  /**
+   * Mirror tag invalidations into Next's own manifest so its stale-while-revalidate logic works
+   * (see `next-bridge.ts`). Default `true`.
+   */
+  syncNextManifest?: boolean
   /** Stamp entries with this clock instead of `Date.now` (tests). */
   localClock?: () => number
 }
@@ -40,10 +46,16 @@ export class CacheForgeRuntime {
         ? new RedisStore({ connection: options.store, prefix: options.prefix ?? 'cacheforge' })
         : options.store
     this.clock = new ClusterClock(this.store, options.localClock)
-    this.manifest = new TagManifest(this.store, {
-      consistency: options.consistency ?? 'eventual',
-      syncIntervalMs: options.syncIntervalMs ?? 5_000,
-    })
+    const nextManifest = options.syncNextManifest === false ? undefined : loadNextTagsManifest()
+    this.manifest = new TagManifest(
+      this.store,
+      {
+        consistency: options.consistency ?? 'eventual',
+        syncIntervalMs: options.syncIntervalMs ?? 5_000,
+      },
+      nextManifest &&
+        ((tag, state) => mirrorIntoNext(nextManifest, tag, state, (t) => this.clock.toLocal(t))),
+    )
     this.reportError = options.onError ?? defaultOnError()
   }
 

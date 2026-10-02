@@ -21,6 +21,8 @@ export class TagManifest {
   constructor(
     private readonly store: CacheStore,
     private readonly options: { consistency: Consistency; syncIntervalMs: number },
+    /** Called whenever a tag's state changes locally, e.g. to mirror it into Next's own manifest. */
+    private readonly onChange?: (tag: string, state: TagState) => void,
   ) {}
 
   async start(): Promise<void> {
@@ -40,14 +42,19 @@ export class TagManifest {
   }
 
   apply(tags: readonly string[], update: TagState): void {
-    for (const tag of tags) this.states.set(tag, mergeTagState(this.states.get(tag), update))
+    for (const tag of tags) this.merge(tag, update)
+  }
+
+  private merge(tag: string, update: TagState): void {
+    this.states.set(tag, mergeTagState(this.states.get(tag), update))
+    this.onChange?.(tag, update)
   }
 
   private async sync(): Promise<void> {
     this.syncing ??= (async () => {
       try {
         const all = await this.store.getAllTagStates()
-        for (const [tag, state] of all) this.states.set(tag, mergeTagState(this.states.get(tag), state))
+        for (const [tag, state] of all) this.merge(tag, state)
         this.lastSync = Date.now()
       } finally {
         this.syncing = undefined

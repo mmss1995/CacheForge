@@ -36,8 +36,9 @@ describe('legacy cacheHandler (ISR pages, fetch cache)', () => {
 
     const hit = await b!.get('/posts', { kind: 'APP_PAGE' })
     expect(hit?.value).toMatchObject({ kind: 'APP_PAGE', html: '<h1>v1</h1>' })
-    expect(Buffer.isBuffer((hit?.value as { rscData: unknown }).rscData)).toBe(true)
-    expect((hit?.value as { segmentData: Map<string, Buffer> }).segmentData.get('/')?.toString()).toBe('seg')
+    const value = hit!.value!
+    expect(Buffer.isBuffer(value.rscData)).toBe(true)
+    expect((value.segmentData as Map<string, Buffer>).get('/')?.toString()).toBe('seg')
     expect(await b!.get('/missing', { kind: 'APP_PAGE' })).toBeNull()
   })
 
