@@ -1,0 +1,10 @@
+{
+  "name": "@cacheforge/core",
+  "version": "0.1.0",
+  "description": "CacheForge contracts: store interface, tag staleness rules, value codec, in-memory store",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}

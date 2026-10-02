@@ -1,0 +1,10 @@
+export { createCacheHandler, NEXT_CACHE_TAGS_HEADER } from './legacy.js'
+export type { LegacyCacheHandlerClass, LegacyEntry } from './legacy.js'
+export { createUseCacheHandler } from './use-cache.js'
+export type { UseCacheEntry, UseCacheHandler } from './use-cache.js'
+export { CacheForgeRuntime } from './runtime.js'
+export type { CacheForgeOptions } from './runtime.js'
+export { ClusterClock } from './clock.js'
+export { TagManifest } from './manifest.js'
+export type { Consistency } from './manifest.js'
+export { createTestCluster } from "./cluster.js"

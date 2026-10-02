@@ -1,0 +1,28 @@
+{
+  "name": "@cacheforge/next",
+  "version": "0.1.0",
+  "description": "Shared cache handlers for self-hosted Next.js: the legacy `cacheHandler` and the `use cache` `cacheHandlers`",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "node ../../scripts/bundle.mjs next",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cacheforge/core": "*",
+    "@cacheforge/redis": "*"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": { "optional": true }
+  }
+}

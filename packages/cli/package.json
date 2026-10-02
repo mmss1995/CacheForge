@@ -1,0 +1,17 @@
+{
+  "name": "@cacheforge/cli",
+  "version": "0.1.0",
+  "description": "Inspect and invalidate a CacheForge cache from the terminal",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "cacheforge": "./dist/bin.js" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "node ../../scripts/bundle.mjs cli",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cacheforge/core": "*",
+    "@cacheforge/redis": "*"
+  }
+}

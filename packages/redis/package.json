@@ -1,0 +1,10 @@
+{
+  "name": "@cacheforge/redis",
+  "version": "0.1.0",
+  "description": "Redis store for CacheForge (ioredis)",
+  "license": "MIT",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": { "@cacheforge/core": "*", "ioredis": "^6.0.0" }
+}

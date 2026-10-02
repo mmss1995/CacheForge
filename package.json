@@ -1,0 +1,32 @@
+{
+  "name": "cacheforge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A shared cache for self-hosted Next.js: every instance sees the same ISR pages, fetch cache and 'use cache' entries, and revalidateTag reaches all of them",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build -w @cacheforge/next && npm run build -w @cacheforge/cli",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config e2e/vitest.config.ts",
+    "cacheforge": "tsx packages/cli/src/bin.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "esbuild": "^0.28.0",
+    "oxlint": "^1.85.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.2"
+  }
+}
