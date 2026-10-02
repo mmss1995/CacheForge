@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { RedisStore } from '@cacheforge/redis'
 
 export const REDIS_URL = process.env.CACHEFORGE_TEST_REDIS ?? 'redis://127.0.0.1:6390'
+export const REDIS_PORT = Number(new URL(REDIS_URL).port || 6379)
 const root = fileURLToPath(new URL('..', import.meta.url))
 
 export interface Instance {
@@ -92,3 +93,41 @@ export async function revalidate(instance: Instance, tag: string, hard: boolean)
 
 /** Poll until `probe` returns something other than `undefined`. */
 export const eventually = waitFor
+
+/** A TCP proxy in front of Redis that can be cut and restored, to simulate an outage. */
+export async function createProxy(targetPort: number, listenPort: number) {
+  const { createServer, connect } = await import('node:net')
+  const sockets = new Set<import('node:net').Socket>()
+  let server: import('node:net').Server | undefined
+
+  const listen = () =>
+    new Promise<void>((resolve) => {
+      server = createServer((client) => {
+        const upstream = connect(targetPort, '127.0.0.1')
+        for (const s of [client, upstream]) {
+          sockets.add(s)
+          s.on('close', () => sockets.delete(s))
+          s.on('error', () => s.destroy())
+        }
+        client.pipe(upstream)
+        upstream.pipe(client)
+      })
+      server.listen(listenPort, '127.0.0.1', resolve)
+    })
+  await listen()
+  return {
+    url: `redis://127.0.0.1:${listenPort}`,
+    /** Drop every connection and refuse new ones. */
+    async cut() {
+      // Destroy first: server.close() waits for open connections to end.
+      for (const s of sockets) s.destroy()
+      await new Promise<void>((resolve) => server?.close(() => resolve()))
+    },
+    async restore() {
+      await listen()
+    },
+    async stop() {
+      await this.cut()
+    },
+  }
+}

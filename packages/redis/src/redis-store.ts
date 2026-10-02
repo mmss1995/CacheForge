@@ -44,10 +44,16 @@ export class RedisStore implements CacheStore {
   private subscribing: Promise<void> | undefined
 
   constructor(options: RedisStoreOptions) {
+    // Fail fast and reconnect with a capped backoff: the cache must never be what hangs a request.
+    const resilient: RedisOptions = {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 2_000,
+      retryStrategy: (attempt) => Math.min(attempt * 200, 2_000),
+    }
     this.redis =
       typeof options.connection === 'string'
-        ? new Redis(options.connection, { maxRetriesPerRequest: 2 })
-        : new Redis({ maxRetriesPerRequest: 2, ...options.connection })
+        ? new Redis(options.connection, resilient)
+        : new Redis({ ...resilient, ...options.connection })
     this.prefix = options.prefix ?? 'cacheforge'
     this.defaultTtl = options.defaultTtlSeconds ?? DEFAULT_TTL_SECONDS
     this.redis.defineCommand('cfMaxSet', { numberOfKeys: 1, lua: MAX_SET })

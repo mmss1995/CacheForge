@@ -21,6 +21,16 @@ export interface CacheForgeOptions {
   consistency?: Consistency
   /** How often the local tag view is fully re-synced as a safety net. Default 5000. */
   syncIntervalMs?: number
+  /**
+   * Give up on a cache read/write after this long and serve from the origin instead. A slow or
+   * unreachable Redis must cost a request milliseconds, not hang it. Default 750.
+   */
+  timeoutMs?: number
+  /**
+   * After this many consecutive failures stop calling the store for `cooldownMs`, so an outage
+   * adds no latency at all. One success closes the breaker again. Defaults: 3 and 5000.
+   */
+  breaker?: { failures?: number; cooldownMs?: number }
   /** Called when the store fails during a read or write (which then degrade to cache misses). */
   onError?: (error: unknown, operation: string) => void
   /**
@@ -38,7 +48,12 @@ export class CacheForgeRuntime {
   readonly clock: ClusterClock
   readonly manifest: TagManifest
   private readonly reportError: (error: unknown, operation: string) => void
+  private readonly timeoutMs: number
+  private readonly breakerFailures: number
+  private readonly breakerCooldownMs: number
   private starting: Promise<void> | undefined
+  private consecutiveFailures = 0
+  private openUntil = 0
 
   constructor(options: CacheForgeOptions) {
     this.store =
@@ -57,6 +72,14 @@ export class CacheForgeRuntime {
         ((tag, state) => mirrorIntoNext(nextManifest, tag, state, (t) => this.clock.toLocal(t))),
     )
     this.reportError = options.onError ?? defaultOnError()
+    this.timeoutMs = options.timeoutMs ?? 750
+    this.breakerFailures = options.breaker?.failures ?? 3
+    this.breakerCooldownMs = options.breaker?.cooldownMs ?? 5_000
+  }
+
+  /** True while the breaker is open, i.e. the store is being skipped. */
+  get degraded(): boolean {
+    return Date.now() < this.openUntil
   }
 
   /** Connect lazily, once. A store that is down at boot must not stop Next from booting. */
@@ -75,14 +98,21 @@ export class CacheForgeRuntime {
   }
 
   /**
-   * Run a cache read/write; on a store failure report it and return `fallback` so the request is
-   * served from the origin instead of failing.
+   * Run a cache read/write; on a store failure or timeout report it and return `fallback` so the
+   * request is served from the origin instead of failing or hanging.
    */
   async guard<T>(operation: string, fallback: T, run: () => Promise<T>): Promise<T> {
+    if (this.degraded) return fallback
     try {
-      await this.ready()
-      return await run()
+      await withTimeout(this.ready(), this.timeoutMs, 'connect')
+      const result = await withTimeout(run(), this.timeoutMs, operation)
+      this.consecutiveFailures = 0
+      return result
     } catch (error) {
+      this.consecutiveFailures++
+      if (this.consecutiveFailures >= this.breakerFailures) {
+        this.openUntil = Date.now() + this.breakerCooldownMs
+      }
       this.reportError(error, operation)
       return fallback
     }
@@ -94,11 +124,13 @@ export class CacheForgeRuntime {
    */
   async revalidate(tags: readonly string[], durations?: RevalidationDurations): Promise<void> {
     if (tags.length === 0) return
-    await this.ready()
+    // Generous but bounded: a caller is waiting on this, and it must fail loudly rather than hang.
+    const limit = Math.max(this.timeoutMs * 4, 2_000)
+    await withTimeout(this.ready(), limit, 'connect')
     const update = revalidationUpdate(this.clock.now(), durations)
     this.manifest.apply(tags, update)
-    await this.store.markTags(tags, update)
-    await this.store.publish({ type: 'tags', tags: [...tags], update })
+    await withTimeout(this.store.markTags(tags, update), limit, 'markTags')
+    await withTimeout(this.store.publish({ type: 'tags', tags: [...tags], update }), limit, 'publish')
   }
 
   async close(): Promise<void> {
@@ -106,6 +138,14 @@ export class CacheForgeRuntime {
     this.manifest.stop()
     await this.store.close()
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`cache store timed out after ${ms}ms (${what})`)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
 function defaultOnError(): (error: unknown, operation: string) => void {

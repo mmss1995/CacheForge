@@ -218,3 +218,47 @@ describe("'use cache' cacheHandlers", () => {
     expect(onB - onA).toBeLessThan(21_000)
   })
 })
+
+describe('a slow or dead store', () => {
+  const hangs = () => new Promise<never>(() => {})
+
+  it('costs a read at most the timeout, then the breaker skips the store entirely', async () => {
+    const store = new MemoryStore()
+    const onError = vi.fn()
+    const { instances } = createTestCluster(1, {
+      shared: store,
+      onError,
+      timeoutMs: 20,
+      breaker: { failures: 2, cooldownMs: 80 },
+    })
+    const h = new instances[0]!.legacy({})
+    const get = vi.spyOn(store, 'get').mockImplementation(hangs)
+
+    const started = Date.now()
+    expect(await h.get('/p', { kind: 'APP_PAGE' })).toBeNull()
+    expect(await h.get('/p', { kind: 'APP_PAGE' })).toBeNull()
+    expect(Date.now() - started).toBeLessThan(500)
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(instances[0]!.legacy.runtime.degraded).toBe(true)
+
+    // Breaker open: instant misses, the store is not touched.
+    const t = Date.now()
+    expect(await h.get('/p', { kind: 'APP_PAGE' })).toBeNull()
+    expect(Date.now() - t).toBeLessThan(10)
+    expect(get).toHaveBeenCalledTimes(2)
+
+    // After the cooldown one successful call closes it again.
+    await new Promise((r) => setTimeout(r, 100))
+    get.mockRestore()
+    await h.set('/p', page('x'), {})
+    expect(await h.get('/p', { kind: 'APP_PAGE' })).not.toBeNull()
+    expect(instances[0]!.legacy.runtime.degraded).toBe(false)
+  })
+
+  it('still lets an invalidation fail loudly instead of hanging', async () => {
+    const store = new MemoryStore()
+    const { instances } = createTestCluster(1, { shared: store, timeoutMs: 20 })
+    vi.spyOn(store, 'markTags').mockImplementation(hangs)
+    await expect(instances[0]!.useCache.updateTags(['t'])).rejects.toThrow(/timed out/)
+  }, 10_000)
+})
