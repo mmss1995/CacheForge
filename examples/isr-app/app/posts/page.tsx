@@ -24,6 +24,9 @@ const getPosts = unstable_cache(
 
 export default async function Posts() {
   const data = await getPosts()
+  // Demo on purpose: shows render time next to the cached generation time.
+  // oxlint-disable-next-line react/purity
+  const renderedAt = new Date().toISOString()
   return (
     <main>
       <h1>Posts</h1>
@@ -38,7 +41,7 @@ export default async function Posts() {
       </p>
       <p>
         page rendered by <b id="rendered-by">{process.env.INSTANCE_ID ?? 'local'}</b> at{' '}
-        <span id="rendered-at">{new Date().toISOString()}</span>
+        <span id="rendered-at">{renderedAt}</span>
       </p>
     </main>
   )
